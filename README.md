@@ -1,10 +1,21 @@
 # Character-Based Delphi Method for the Dragon's Teeth Dilemma
 
-This project uses local LLM models to simulate a multi-agent Delphi method approach to solving an ethical dilemma inspired by Star Trek. The agents take on the personas of various cartoon characters to provide diverse perspectives on a complex ethical question.
+This project uses local LLM models to simulate a multi-agent Delphi method approach to solving an ethical dilemma inspired by Star Trek. The agents take on the personas of various cartoon characters to provide diverse perspectives on a central ethical question:
+
+> **Should we revive an ancient civilization of powerful warriors who have been in suspended animation for 900 years, considering the potential consequences to the balance of power in the region?**
+
+## Quick Start: Reading Character Responses
+
+To dive right into the character perspectives, check the `delphi_round1/` directory after running the simulation. Each character's ethical analysis is available as both a JSON file and a readable Markdown file:
+
+- `delphi_round1/bugs-bunny.md` - The laid-back pragmatist's view
+- `delphi_round1/lisa-simpson.md` - The analytical child prodigy's perspective
+- `delphi_round1/yoda.md` - The wise Jedi master's insights
+- And many more!
 
 ## Project Overview
 
-The "Dragon's Teeth Dilemma" refers to a fictional scenario where an ancient civilization of powerful warriors has been in suspended animation for 900 years. The ethical question is whether to revive these warriors, considering potential consequences to the balance of power in the region.
+The "Dragon's Teeth Dilemma" is a fictional scenario inspired by Star Trek ethics. It presents a situation where advanced technology could awaken warriors from the distant past, potentially disrupting the current social and political equilibrium.
 
 This project:
 
@@ -15,7 +26,7 @@ This project:
 
 ## The Delphi Method
 
-The Delphi method is a structured communication technique that relies on a panel of experts answering questionnaires in multiple rounds. After each round, responses are anonymized and shared with the group to encourage refinement of opinions. This project simulates this process using LLM-powered character agents instead of human experts.
+The [Delphi method](https://en.wikipedia.org/wiki/Delphi_method) is a structured communication technique that relies on a panel of experts answering questionnaires in multiple rounds. After each round, responses are anonymized and shared with the group to encourage refinement of opinions. This project simulates this process using LLM-powered character agents instead of human experts.
 
 ## Character Agents
 
@@ -69,13 +80,15 @@ docker-compose up --build
 
 ## Output and Results
 
-The system generates two types of outputs for each character:
+After running the simulation, you'll find engaging character perspectives in the `delphi_round1/` directory:
 
 1. **JSON files** (`delphi_round1/{character}.json`): Structured data containing ratings, position summaries, detailed explanations, and confidence levels for each question.
 
-2. **Markdown files** (`delphi_round1/{character}.md`): Human-readable formatted responses, suitable for review and analysis.
+2. **Markdown files** (`delphi_round1/{character}.md`): Human-readable formatted responses that capture each character's unique voice and ethical reasoning.
 
-Additionally, a composite JSON file (`round1_responses.json`) contains all character responses in a single document.
+These files are the heart of the project - each character brings their unique personality to bear on the complex ethical questions. For example, Bender might prioritize self-interest, while Lisa Simpson offers a thoughtful analysis integrating multiple ethical frameworks.
+
+A composite JSON file (`round1_responses.json`) contains all character responses in a single document for comparative analysis.
 
 ## Round One Questions
 
