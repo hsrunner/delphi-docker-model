@@ -1,59 +1,57 @@
+#!/usr/bin/env python3
+"""
+Delphi Method Simulation - A simplified implementation for character-based ethical analysis.
+"""
 import requests
 import json
+import hjson
 import time
 import os
-import traceback
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple, Union
+import re
+import logging
+import unicodedata
+from functools import wraps
+from pathlib import Path
+from typing import Dict, List, Optional, Any, Tuple, Union, Callable
 
-# Constants for configuration
-BASE_URL = "http://localhost:12434/engines/llama.cpp/v1"
-MODEL = "ai/gemma3"  # This model worked well in our tests
-OUTPUT_DIR = "delphi_round1"
-CHARACTERS = [
-    "bugs-bunny",
-    "rick-sanchez",
-    "stewie-griffin",
-    "doraemon",
-    "sandy-cheeks",
-    "yoda",
-    "bender",
-    "stimpy",
-    "lisa-simpson",
-    "twilight-sparkle"
-]
-COMPOSITE_JSON = "round1_responses.json"
-LOG_FILE = "delphi_process.log"
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger('delphi')
 
-# Constants for API and validation
-API_TIMEOUT = 120  # seconds
-API_MAX_RETRIES = 3
-API_BACKOFF_FACTOR = 2
-MAX_TOKENS = 2048
-TEMPERATURE = 0.7
+# Configuration
+CONFIG = {
+    # API settings
+    'base_url': 'http://localhost:12434/engines/llama.cpp/v1',
+    'model': 'ai/gemma3',
+    'temperature': 0.7,
+    'max_tokens': 2048,
+    'api_timeout': 120,
+    'api_max_retries': 3,
+    
+    # Output settings
+    'output_dir': 'delphi_round1',
+    'composite_json': 'round1_responses.json',
+    'log_file': 'delphi_process.log',
+    'debug_dir': 'debug_output',  # Directory for debugging output
+    
+    # Response parameters
+    'question_count': 6,
+    'rating_range': (1, 7),  # min, max
+    'confidence_range': (1, 5),  # min, max
+    
+    # Character list
+    'characters': [
+        "bugs-bunny", "rick-sanchez", "stewie-griffin", "doraemon",
+        "sandy-cheeks", "yoda", "bender", "stimpy", 
+        "lisa-simpson", "twilight-sparkle"
+    ]
+}
 
-# Constants for response validation
-QUESTION_COUNT = 6
-MIN_RATING = 1
-MAX_RATING = 7
-MIN_CONFIDENCE = 1
-MAX_CONFIDENCE = 5
-DEFAULT_RATING = 4
-DEFAULT_CONFIDENCE = 3
-
-# Required sections in character profiles
-REQUIRED_PROFILE_SECTIONS = ["CHARACTER_BACKGROUND", "ETHICAL_FRAMEWORK", "RESPONSE_GUIDELINES"]
-
-# Confidence level descriptions
-CONFIDENCE_DESCRIPTIONS = [
-    "Not sure at all",
-    "Not very sure",
-    "Moderately sure",
-    "Pretty sure",
-    "Very sure"
-]
-
-# Question texts for markdown generation
+# Questions for the questionnaire (used in markdown generation)
 QUESTIONS = [
     "What are the potential short-term and long-term consequences of reviving this ancient civilization?",
     "How might our intervention align with or violate the core principles of the Prime Directive?",
@@ -63,705 +61,501 @@ QUESTIONS = [
     "What criteria should we use to determine if this civilization deserves the same protection as other sentient species?"
 ]
 
-# Log levels
-LOG_INFO = "INFO"
-LOG_WARNING = "WARNING"
-LOG_ERROR = "ERROR"
-LOG_DEBUG = "DEBUG"
+# Rating descriptions for markdown generation
+RATING_DESCRIPTIONS = {
+    1: "(Strongly against waking them)",
+    2: "(Against waking them)",
+    3: "(Against waking them)",
+    4: "(Neutral/Uncertain)",
+    5: "(Favor waking them)",
+    6: "(Favor waking them)",
+    7: "(Strongly favor waking them)"
+}
 
-# Ensure output directory exists
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+# Confidence descriptions for markdown generation
+CONFIDENCE_DESCRIPTIONS = [
+    "Not sure at all", "Not very sure", "Moderately sure", 
+    "Pretty sure", "Very sure"
+]
+
+# Example JSON structure for the system prompt
+EXAMPLE_JSON = """
+{
+  "responses": [
+    {
+      "question": 1,
+      "rating": 5,
+      "position_summary": "Brief summary of position for question 1.",
+      "detailed_explanation": "Detailed explanation for question 1.",
+      "confidence": 4
+    },
+    {
+      "question": 2,
+      "rating": 3,
+      "position_summary": "Brief summary of position for question 2.",
+      "detailed_explanation": "Detailed explanation for question 2.",
+      "confidence": 5
+    }
+    ... and so on for all 6 questions
+  ]
+}
+"""
+
+# Initialize output directory and debug directory
+Path(CONFIG['output_dir']).mkdir(exist_ok=True)
+Path(CONFIG['debug_dir']).mkdir(exist_ok=True)
+
+# Set up file handler for logging
+file_handler = logging.FileHandler(CONFIG['log_file'], mode='w')
+file_handler.setFormatter(logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s'))
+logger.addHandler(file_handler)
 
 
-def log_entry(content: str, speaker: str = "System", level: str = LOG_INFO) -> None:
-    """
-    Log process to file and console with severity level.
+def retry(max_retries=3, backoff_factor=2):
+    """Retry decorator with exponential backoff."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(1, max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt == max_retries:
+                        logger.error(f"All {max_retries} attempts failed. Last error: {str(e)}")
+                        raise
+                    wait_time = backoff_factor ** (attempt - 1)
+                    logger.warning(f"Attempt {attempt} failed: {str(e)}. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+        return wrapper
+    return decorator
+
+
+def find_file(name: str, extensions: List[str] = None, locations: List[str] = None) -> Optional[str]:
+    """Find a file by name, with optional extensions and locations."""
+    extensions = extensions or ['']  # Default to no extension
+    locations = locations or ['', 'profiles/']  # Current dir and profiles dir
     
-    Args:
-        content: The message to log
-        speaker: The source of the message (default: "System")
-        level: Severity level (INFO, WARNING, ERROR, DEBUG)
-    """
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    entry = f"[{timestamp}] {level} - {speaker}: {content}"
+    # If name has a hyphen, also try the base name
+    base_names = [name]
+    if '-' in name:
+        base_names.append(name.split('-')[0])
     
-    print(entry)
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(entry + "\n")
+    # Try each combination using a generator expression
+    for base_name in base_names:
+        for location in locations:
+            for ext in extensions:
+                path = Path(location) / f"{base_name}{ext}"
+                if path.exists():
+                    logger.info(f"Found file: {path}")
+                    return str(path)
+    
+    return None
 
 
-def api_call_with_retry(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Make API call with exponential backoff retry logic.
+def load_file(path: str) -> Optional[str]:
+    """Load file content from path."""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except Exception as e:
+        logger.error(f"Error loading file {path}: {str(e)}")
+        return None
+
+
+def save_debug_file(character: str, content: str, suffix: str = "raw"):
+    """Save content to a debug file for inspection."""
+    try:
+        debug_path = Path(CONFIG['debug_dir']) / f"{character}_{suffix}.txt"
+        with open(debug_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        logger.info(f"Saved debug file: {debug_path}")
+    except Exception as e:
+        logger.error(f"Error saving debug file for {character}: {str(e)}")
+
+
+def normalize_text(text: str) -> str:
+    """Normalize Unicode text to ASCII for JSON compatibility."""
+    # First, normalize Unicode using NFKD form (compatibility decomposition)
+    normalized = unicodedata.normalize('NFKD', text)
     
-    Args:
-        payload: The JSON payload to send to the API
-        
-    Returns:
-        The API response as a dictionary
-        
-    Raises:
-        Exception: If the API call fails after all retries
-    """
-    url = f"{BASE_URL}/chat/completions"
+    # Replace specific problematic Unicode characters
+    replacements = {
+        '\u2026': '...',  # Ellipsis
+        '\u2013': '-',    # En dash
+        '\u2014': '--',   # Em dash
+        '\u2018': "'",    # Left single quote
+        '\u2019': "'",    # Right single quote
+        '\u201C': '"',    # Left double quote
+        '\u201D': '"',    # Right double quote
+        '\u00A0': ' ',    # Non-breaking space
+        '\u2022': '*',    # Bullet
+        '\u2212': '-',    # Minus sign
+    }
+    
+    # Apply all replacements at once
+    for char, replacement in replacements.items():
+        normalized = normalized.replace(char, replacement)
+    
+    # Convert non-ASCII characters to ASCII equivalents or spaces
+    return ''.join(
+        char if ord(char) < 128 else 
+        unicodedata.normalize('NFKD', char).encode('ascii', 'ignore').decode('ascii') or ' '
+        for char in normalized
+    )
+
+
+@retry(max_retries=CONFIG['api_max_retries'])
+def call_api(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Make API call with retry logic."""
+    url = f"{CONFIG['base_url']}/chat/completions"
     headers = {"Content-Type": "application/json"}
     
-    for attempt in range(API_MAX_RETRIES):
-        try:
-            log_entry(f"Attempting API call (try {attempt+1}/{API_MAX_RETRIES})")
-            response = requests.post(url, json=payload, headers=headers, timeout=API_TIMEOUT)
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                log_entry(f"API Error {response.status_code}: {response.text}", level=LOG_ERROR)
-                if attempt < API_MAX_RETRIES - 1:  # Only sleep if we're going to retry
-                    time.sleep(API_BACKOFF_FACTOR ** attempt)
-        except requests.exceptions.Timeout:
-            log_entry(f"API call timed out", level=LOG_ERROR)
-            if attempt < API_MAX_RETRIES - 1:
-                time.sleep(API_BACKOFF_FACTOR ** attempt)
-        except Exception as e:
-            log_entry(f"Exception during API call: {str(e)}", level=LOG_ERROR)
-            if attempt < API_MAX_RETRIES - 1:
-                time.sleep(API_BACKOFF_FACTOR ** attempt)
+    logger.info("Making API call")
+    response = requests.post(url, json=payload, headers=headers, timeout=CONFIG['api_timeout'])
     
-    raise Exception(f"API request failed after {API_MAX_RETRIES} retries")
+    if response.status_code != 200:
+        raise Exception(f"API Error {response.status_code}: {response.text}")
+    
+    return response.json()
 
 
-def find_character_profile(character: str) -> Optional[str]:
-    """
-    Search for the character profile in various locations.
+def extract_json_blocks(text: str) -> List[str]:
+    """Extract potential JSON blocks from text."""
+    # Use list comprehension to collect all potential JSON blocks
+    return (
+        # First try to find JSON in code blocks
+        re.findall(r'```(?:json)?(.*?)```', text, re.DOTALL) or
+        # Then look for JSON-like objects starting with { and containing "responses"
+        re.findall(r'(\{.*"responses".*\})', text, re.DOTALL) or
+        # If we can't find a clearly defined JSON block, return the whole text
+        [text]
+    )
+
+
+def validate_response(i: int, response: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and normalize a single response."""
+    # Start with a copy of the response to avoid modifying the original
+    resp = response.copy()
     
-    Args:
-        character: The character name to search for
-        
-    Returns:
-        The path to the profile file if found, None otherwise
-    """
-    # Check for the file in various locations
-    possible_filenames = [
-        f"{character}.txt",                  # Root directory with exact name
-        os.path.join("profiles", f"{character}.txt"),  # Profiles directory with exact name
+    # Set correct question number
+    resp["question"] = i + 1
+    
+    # Validate rating
+    min_rating, max_rating = CONFIG['rating_range']
+    if "rating" not in resp or not isinstance(resp["rating"], (int, float)):
+        resp["rating"] = 4
+        logger.warning(f"Missing or invalid rating for question {i+1}, setting to neutral (4)")
+    else:
+        orig_rating = resp["rating"]
+        resp["rating"] = max(min_rating, min(max_rating, int(resp["rating"])))
+        if resp["rating"] != orig_rating:
+            logger.warning(f"Rating out of range ({orig_rating}) for question {i+1}, clamped to {resp['rating']}")
+    
+    # Validate confidence
+    min_conf, max_conf = CONFIG['confidence_range']
+    if "confidence" not in resp or not isinstance(resp["confidence"], (int, float)):
+        resp["confidence"] = 3
+        logger.warning(f"Missing or invalid confidence for question {i+1}, setting to moderate (3)")
+    else:
+        orig_conf = resp["confidence"]
+        resp["confidence"] = max(min_conf, min(max_conf, int(resp["confidence"])))
+        if resp["confidence"] != orig_conf:
+            logger.warning(f"Confidence out of range ({orig_conf}) for question {i+1}, clamped to {resp['confidence']}")
+    
+    # Validate and normalize text fields
+    for field in ["position_summary", "detailed_explanation"]:
+        if field not in resp:
+            resp[field] = f"No {field.replace('_', ' ')} for question {i+1}"
+            logger.warning(f"Missing {field} for question {i+1}")
+        else:
+            resp[field] = normalize_text(resp[field])
+    
+    return resp
+
+
+def validate_and_cleanup_structure(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and clean up the parsed JSON structure."""
+    result = parsed.copy()
+    
+    # Ensure responses array exists
+    if "responses" not in result:
+        logger.warning("'responses' field missing, adding default structure")
+        result["responses"] = []
+    
+    # Ensure we have the right number of responses - fill missing or trim extra
+    while len(result["responses"]) < CONFIG['question_count']:
+        q_num = len(result["responses"]) + 1
+        logger.warning(f"Missing response for question {q_num}, adding default")
+        result["responses"].append({
+            "question": q_num,
+            "rating": 4,  # Default neutral
+            "position_summary": f"Missing response for question {q_num}",
+            "detailed_explanation": f"No response provided for question {q_num}",
+            "confidence": 3  # Default moderate confidence
+        })
+    
+    if len(result["responses"]) > CONFIG['question_count']:
+        logger.warning(f"Too many responses ({len(result['responses'])}), trimming to {CONFIG['question_count']}")
+        result["responses"] = result["responses"][:CONFIG['question_count']]
+    
+    # Validate and normalize each response
+    result["responses"] = [
+        validate_response(i, resp) for i, resp in enumerate(result["responses"])
     ]
     
-    # Add alternative filenames for hyphenated characters
-    if "-" in character:
-        base_name = character.split("-")[0]
-        possible_filenames.append(f"{base_name}.txt")  # Root with base name
-        possible_filenames.append(os.path.join("profiles", f"{base_name}.txt"))  # Profiles with base name
-    
-    # Try each possible filename
-    for filename in possible_filenames:
-        if os.path.exists(filename):
-            log_entry(f"Found profile for {character} at {filename}")
-            return filename
-    
+    return result
+
+
+def try_parse(block: str, character: str, parser: Callable, parser_name: str) -> Optional[Dict[str, Any]]:
+    """Try to parse a block of text using the specified parser."""
+    try:
+        parsed = parser(block)
+        if "responses" in parsed:
+            logger.info(f"Successfully parsed JSON using {parser_name}")
+            save_debug_file(character, json.dumps(parsed, indent=2), f"parsed_{parser_name}")
+            return validate_and_cleanup_structure(parsed)
+    except Exception as e:
+        logger.warning(f"{parser_name} parsing failed: {str(e)}")
     return None
 
 
-def load_character_profile(character: str) -> Optional[str]:
-    """
-    Load character profile from file.
-    
-    Args:
-        character: The character name to load the profile for
-        
-    Returns:
-        The profile content if found and valid, None otherwise
-    """
+def extract_json(text: str, character: str) -> Dict[str, Any]:
+    """Extract and parse JSON from text using hjson for better compatibility."""
     try:
-        profile_path = find_character_profile(character)
+        # Save the original response for debugging
+        save_debug_file(character, text, "raw_response")
         
-        if not profile_path:
-            log_entry(f"No profile file found for {character}", level=LOG_ERROR)
-            return None
+        # First normalize the text to handle special Unicode characters
+        text = normalize_text(text)
+        save_debug_file(character, text, "normalized_response")
         
-        with open(profile_path, "r", encoding="utf-8") as f:
-            content = f.read().strip()
+        # Extract potential JSON blocks
+        json_blocks = extract_json_blocks(text)
         
-        if not content:
-            log_entry(f"Profile file for {character} at {profile_path} is empty", level=LOG_ERROR)
-            return None
+        # Try parsing with each parser in priority order
+        parsers = [("hjson", hjson.loads), ("standard_json", json.loads)]
         
-        # Verify content has required sections
-        missing_sections = [section for section in REQUIRED_PROFILE_SECTIONS if section not in content]
+        # Try each block with each parser until one succeeds
+        for block in json_blocks:
+            for parser_name, parser_func in parsers:
+                result = try_parse(block, character, parser_func, parser_name)
+                if result:
+                    return result
         
-        if missing_sections:
-            log_entry(f"Warning: Character profile for {character} missing sections: {', '.join(missing_sections)}", 
-                     level=LOG_WARNING)
-        
-        return content
-        
-    except Exception as e:
-        log_entry(f"Error loading character profile for {character}: {str(e)}", level=LOG_ERROR)
-        log_entry(traceback.format_exc(), level=LOG_DEBUG)
-        return None
-
-
-def find_questionnaire() -> Optional[str]:
-    """
-    Search for the questionnaire file.
-    
-    Returns:
-        The path to the questionnaire file if found, None otherwise
-    """
-    possible_filenames = ["initial-question.md", "questionnaire.md"]
-    
-    for filename in possible_filenames:
-        if os.path.exists(filename):
-            log_entry(f"Found questionnaire at {filename}")
-            return filename
-    
-    return None
-
-
-def load_questionnaire() -> Optional[str]:
-    """
-    Load the Delphi Method questionnaire.
-    
-    Returns:
-        The questionnaire content if found and valid, None otherwise
-    """
-    try:
-        questionnaire_path = find_questionnaire()
-        
-        if not questionnaire_path:
-            log_entry("Questionnaire file not found after checking multiple locations", level=LOG_ERROR)
-            return None
-        
-        with open(questionnaire_path, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-        
-        if not content:
-            log_entry(f"Questionnaire file at {questionnaire_path} is empty", level=LOG_ERROR)
-            return None
-        
-        return content
-    except Exception as e:
-        log_entry(f"Error loading questionnaire: {str(e)}", level=LOG_ERROR)
-        log_entry(traceback.format_exc(), level=LOG_DEBUG)
-        return None
-
-
-def extract_json_from_text(text: str) -> str:
-    """
-    Extract JSON from text that might contain additional content.
-    
-    Args:
-        text: The text possibly containing JSON
-        
-    Returns:
-        The extracted JSON content as a string
-    """
-    # Try to extract JSON from markdown code blocks
-    if "```json" in text:
-        json_content = text.split("```json")[1].split("```")[0].strip()
-    elif "```" in text:
-        json_content = text.split("```")[1].split("```")[0].strip()
-    else:
-        # Try to find JSON by looking for the opening brace
-        start_idx = text.find('{')
-        if start_idx != -1:
-            # Find the matching closing brace
-            brace_count = 0
-            for i in range(start_idx, len(text)):
-                if text[i] == '{':
-                    brace_count += 1
-                elif text[i] == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        json_content = text[start_idx:i+1]
-                        break
-            else:
-                json_content = text  # Fallback to the whole text
-        else:
-            json_content = text
-    
-    return json_content.strip()
-
-
-def fix_json_common_issues(json_text: str) -> str:
-    """
-    Attempt to fix common JSON issues that might cause parsing to fail.
-    
-    Args:
-        json_text: The JSON string to fix
-        
-    Returns:
-        The fixed JSON string
-    """
-    # Replace single quotes with double quotes
-    fixed_text = json_text.replace("'", "\"")
-    
-    # Fix unescaped quotes in strings
-    in_string = False
-    fixed_chars = []
-    
-    for i, char in enumerate(fixed_text):
-        if char == '"' and (i == 0 or fixed_text[i-1] != '\\'):
-            in_string = not in_string
-        
-        if in_string and char == '"' and i > 0 and fixed_text[i-1] != '\\' and i < len(fixed_text) - 1:
-            fixed_chars.append('\\')
-        
-        fixed_chars.append(char)
-    
-    fixed_text = ''.join(fixed_chars)
-    
-    # Replace problematic characters
-    fixed_text = fixed_text.replace('\n', ' ')
-    fixed_text = fixed_text.replace('\r', ' ')
-    fixed_text = fixed_text.replace('…', '...')
-    
-    return fixed_text
-
-
-def ensure_integer_value(value: Any, default: int) -> int:
-    """
-    Ensure a value is an integer or convert it if possible.
-    
-    Args:
-        value: The value to check
-        default: Default value if conversion fails
-        
-    Returns:
-        The value as an integer
-    """
-    if isinstance(value, int):
-        return value
-    
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    
-    if isinstance(value, str) and value.isdigit():
-        return int(value)
-    
-    return default
-
-
-def clamp_value(value: int, min_value: int, max_value: int) -> int:
-    """
-    Clamp a value between minimum and maximum.
-    
-    Args:
-        value: The value to clamp
-        min_value: Minimum allowed value
-        max_value: Maximum allowed value
-        
-    Returns:
-        The clamped value
-    """
-    return max(min_value, min(max_value, value))
-
-
-def validate_and_fix_responses(parsed_json: Dict[str, Any], character: str) -> Dict[str, Any]:
-    """
-    Validate and fix JSON response structure.
-    
-    Args:
-        parsed_json: The parsed JSON to validate
-        character: The character name for logging
-        
-    Returns:
-        The validated and fixed JSON
-    """
-    if "responses" not in parsed_json or not isinstance(parsed_json["responses"], list):
-        log_entry(f"Invalid JSON structure for {character}: 'responses' field missing or not a list", level=LOG_ERROR)
-        parsed_json["responses"] = []
-    
-    # Ensure we have exactly QUESTION_COUNT responses
-    if len(parsed_json["responses"]) != QUESTION_COUNT:
-        log_entry(f"Expected {QUESTION_COUNT} responses, got {len(parsed_json['responses'])} for {character}", 
-                 level=LOG_WARNING)
-        
-        # Preserve existing responses
-        current_responses = parsed_json["responses"]
-        
-        # Create a new list with QUESTION_COUNT slots
-        fixed_responses = [None] * QUESTION_COUNT
-        
-        # Place existing responses in their correct positions based on question number
-        for response in current_responses:
-            if "question" in response:
-                q_num = ensure_integer_value(response["question"], 0)
-                
-                if 1 <= q_num <= QUESTION_COUNT:
-                    fixed_responses[q_num-1] = response
-        
-        # Fill in any missing responses with defaults
-        for i in range(QUESTION_COUNT):
-            if fixed_responses[i] is None:
-                fixed_responses[i] = {
+        # If all parsing attempts fail, use a fallback structure
+        logger.warning(f"Failed to parse JSON for {character}, using fallback structure")
+        fallback = {
+            "responses": [
+                {
                     "question": i+1,
-                    "rating": DEFAULT_RATING,
-                    "position_summary": f"Missing response for question {i+1}",
-                    "detailed_explanation": f"This response was not provided or was invalid for question {i+1}.",
-                    "confidence": MIN_CONFIDENCE
-                }
-        
-        parsed_json["responses"] = fixed_responses
-    
-    # Ensure each response has all required fields and correct data types
-    for i, response in enumerate(parsed_json["responses"]):
-        # Ensure all required fields exist
-        required_fields = {
-            "question": i+1, 
-            "rating": DEFAULT_RATING, 
-            "position_summary": f"Missing summary for question {i+1}", 
-            "detailed_explanation": f"Missing explanation for question {i+1}", 
-            "confidence": DEFAULT_CONFIDENCE
+                    "rating": 4,
+                    "position_summary": f"Fallback summary for question {i+1}",
+                    "detailed_explanation": f"Unable to parse response for question {i+1}",
+                    "confidence": 3
+                } for i in range(CONFIG['question_count'])
+            ]
         }
         
-        for field, default_value in required_fields.items():
-            if field not in response:
-                response[field] = default_value
-                log_entry(f"Added missing '{field}' field to response {i+1} for {character}", level=LOG_WARNING)
+        save_debug_file(character, json.dumps(fallback, indent=2), "fallback_json")
+        return fallback
         
-        # Force question number to match its position in the array
-        if ensure_integer_value(response["question"], 0) != i+1:
-            log_entry(f"Fixed question number for response {i+1} (was {response['question']}) for {character}", 
-                     level=LOG_WARNING)
-            response["question"] = i+1
-        
-        # Ensure rating is an integer between MIN_RATING and MAX_RATING
-        response["rating"] = ensure_integer_value(response["rating"], DEFAULT_RATING)
-        
-        if response["rating"] < MIN_RATING or response["rating"] > MAX_RATING:
-            log_entry(f"Rating value {response['rating']} out of range for question {i+1} for {character}, clamping", 
-                     level=LOG_WARNING)
-            response["rating"] = clamp_value(response["rating"], MIN_RATING, MAX_RATING)
-        
-        # Ensure confidence is an integer between MIN_CONFIDENCE and MAX_CONFIDENCE
-        if isinstance(response["confidence"], str):
-            try:
-                response["confidence"] = float(response["confidence"])
-            except ValueError:
-                response["confidence"] = DEFAULT_CONFIDENCE
-                log_entry(f"Set default confidence for question {i+1} for {character}", level=LOG_WARNING)
-        
-        response["confidence"] = ensure_integer_value(response["confidence"], DEFAULT_CONFIDENCE)
-        
-        if response["confidence"] < MIN_CONFIDENCE or response["confidence"] > MAX_CONFIDENCE:
-            log_entry(f"Confidence value {response['confidence']} out of range for question {i+1} for {character}, clamping", 
-                     level=LOG_WARNING)
-            response["confidence"] = clamp_value(response["confidence"], MIN_CONFIDENCE, MAX_CONFIDENCE)
-    
-    return parsed_json
-
-
-def parse_api_response(content: str, character: str) -> Dict[str, Any]:
-    """
-    Parse the API response and handle potential JSON errors.
-    
-    Args:
-        content: The API response content
-        character: The character name for logging
-        
-    Returns:
-        The parsed and validated JSON
-    """
-    try:
-        # First try to extract JSON from the response
-        json_content = extract_json_from_text(content)
-        
-        # Try to parse the JSON
-        try:
-            parsed_json = json.loads(json_content)
-        except json.JSONDecodeError:
-            # If parsing fails, try to fix common issues
-            fixed_content = fix_json_common_issues(json_content)
-            parsed_json = json.loads(fixed_content)
-        
-        # Validate and fix the structure
-        parsed_json = validate_and_fix_responses(parsed_json, character)
-        
-        return parsed_json
-    
     except Exception as e:
-        log_entry(f"Failed to parse JSON for {character}: {str(e)}", level=LOG_ERROR)
-        log_entry(f"Content that caused parsing error: {content[:500]}...", level=LOG_DEBUG)
-        log_entry(traceback.format_exc(), level=LOG_DEBUG)
+        logger.error(f"Error in extract_json for {character}: {str(e)}")
         
-        # Return a minimal valid structure as fallback
+        # Return minimal valid structure as fallback
+        logger.info(f"Using fallback response structure for {character}")
         return {
             "responses": [
                 {
                     "question": i+1,
-                    "rating": DEFAULT_RATING,
+                    "rating": 4,
                     "position_summary": f"Error parsing response for question {i+1}",
-                    "detailed_explanation": "The AI model generated a response that could not be correctly parsed as JSON. Please check the log file for details.",
-                    "confidence": MIN_CONFIDENCE
-                } for i in range(QUESTION_COUNT)
+                    "detailed_explanation": f"Error processing the response: {str(e)}",
+                    "confidence": 3
+                } for i in range(CONFIG['question_count'])
             ]
         }
 
 
-def generate_character_response(character: str) -> Optional[Dict[str, Any]]:
-    """
-    Generate response from a character.
+def format_markdown(character: str, data: Dict[str, Any]) -> str:
+    """Convert JSON response to markdown format."""
+    character_name = character.replace("-", " ").title()
+    markdown = [f"# {character_name}'s Response to the Dragon's Teeth Dilemma\n"]
     
-    Args:
-        character: The character to generate a response for
+    # Use list comprehension for generating markdown sections
+    sections = []
+    for response in data["responses"]:
+        q_num = response["question"]
+        question = QUESTIONS[q_num-1] if 1 <= q_num <= len(QUESTIONS) else f"Question {q_num}"
+        rating = response.get("rating", 4)
         
-    Returns:
-        The parsed response if successful, None otherwise
-    """
-    character_profile = load_character_profile(character)
-    questionnaire = load_questionnaire()
+        # Get rating description using the lookup table
+        rating_desc = RATING_DESCRIPTIONS.get(rating, RATING_DESCRIPTIONS[4])
+        
+        # Get confidence description using the lookup table
+        confidence = response.get("confidence", 3)
+        confidence_desc = CONFIDENCE_DESCRIPTIONS[min(confidence-1, 4)]
+        
+        # Create section for this response
+        section = [
+            f"## Question {q_num}: {question}",
+            f"**Rating:** {rating} {rating_desc}",
+            f"**Position Summary:** {response.get('position_summary', 'No summary provided')}\n",
+            f"**Detailed Explanation:** {response.get('detailed_explanation', 'No explanation provided')}\n",
+            f"**Confidence:** {confidence} ({confidence_desc})\n"
+        ]
+        sections.extend(section)
     
-    # Check if files were loaded properly
-    if not character_profile:
-        log_entry(f"No character profile found for {character}, skipping", level=LOG_ERROR)
+    markdown.extend(sections)
+    return "\n".join(markdown)
+
+
+def save_response(character: str, data: Dict[str, Any], markdown: str) -> bool:
+    """Save response as both JSON and Markdown. Returns success status."""
+    try:
+        output_dir = Path(CONFIG['output_dir'])
+        
+        # Save JSON
+        with open(output_dir / f"{character}.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        
+        # Save Markdown
+        with open(output_dir / f"{character}.md", "w", encoding="utf-8") as f:
+            f.write(markdown)
+        
+        logger.info(f"Saved response for {character}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving response for {character}: {str(e)}")
+        return False
+
+
+def generate_character_response(character: str) -> Optional[Dict[str, Any]]:
+    """Generate response from a character."""
+    # Load character profile
+    profile_path = find_file(character, extensions=['.txt'])
+    if not profile_path:
+        logger.error(f"No profile found for {character}")
         return None
     
+    profile = load_file(profile_path)
+    if not profile:
+        return None
+    
+    # Load questionnaire
+    questionnaire_path = find_file('initial-question', extensions=['.md']) or find_file('questionnaire', extensions=['.md'])
+    if not questionnaire_path:
+        logger.error("Questionnaire not found")
+        return None
+    
+    questionnaire = load_file(questionnaire_path)
     if not questionnaire:
-        log_entry("Questionnaire not found, cannot proceed", level=LOG_ERROR)
         return None
     
-    # Construct the system message
+    # Construct API request with improved system message
     system_msg = (
         "You are participating in an ethical analysis of a difficult decision. "
         "The scenario involves whether to revive (wake up) an ancient group of warriors "
         "who have been in a special sleep for 900 years using advanced technology. "
-        f"These warriors were once powerful and potentially dangerous. Respond as specified in "
+        "These warriors were once powerful and potentially dangerous. Respond as specified in "
         "the character profile, considering the unique worldview, values, and decision-making style. "
         "Analyze the dilemma from this perspective without explicitly stating \"As [Character]\" "
         "or \"I am [Character].\" Your reasoning should authentically reflect the character's "
-        "thought patterns and values. The response MUST be properly formatted JSON as specified "
-        "in the instructions. The structure must contain \"responses\" as an array with 6 elements "
-        "(one for each question), each containing \"question\", \"rating\", \"position_summary\", "
-        "\"detailed_explanation\", and \"confidence\" fields."
+        "thought patterns and values.\n\n"
+        "IMPORTANT: Your response MUST be properly formatted JSON with the following structure:\n"
+        + EXAMPLE_JSON + "\n"
+        "Your JSON must:\n"
+        "1. Include 6 questions, numbered 1-6\n"
+        "2. For each question, include a rating (1-7), position_summary, detailed_explanation, and confidence (1-5)\n"
+        "3. Use only standard ASCII characters in your JSON (no fancy quotes or special characters)\n"
+        "4. Not include any text before or after the JSON object\n\n"
+        "Return only the JSON object and nothing else."
     )
     
-    # Construct the user message with both profile and questionnaire
-    user_msg = f"{character_profile}\n\n{questionnaire}"
-    
-    # Build the API payload
     payload = {
-        "model": MODEL,
+        "model": CONFIG['model'],
         "messages": [
             {"role": "system", "content": system_msg},
-            {"role": "user", "content": user_msg}
+            {"role": "user", "content": f"{profile}\n\n{questionnaire}"}
         ],
-        "temperature": TEMPERATURE,
-        "max_tokens": MAX_TOKENS
+        "temperature": CONFIG['temperature'],
+        "max_tokens": CONFIG['max_tokens']
     }
     
-    log_entry(f"Generating response for {character}")
     try:
-        result = api_call_with_retry(payload)
-        
-        # Extract the content from the response
+        # Call API
+        result = call_api(payload)
         content = result["choices"][0]["message"]["content"]
         
-        # Log a sample of the raw content for debugging
-        log_entry(f"Sample of raw response from API (first 200 chars): {content[:200]}")
+        # Log a sample of the response
+        logger.info(f"Received response for {character}, length: {len(content)} chars")
         
-        # Parse the response into structured JSON
-        parsed_json = parse_api_response(content, character)
-        
-        return parsed_json
+        # Parse and validate response
+        return extract_json(content, character)
+    
     except Exception as e:
-        log_entry(f"Error generating response for {character}: {str(e)}", level=LOG_ERROR)
-        log_entry(traceback.format_exc(), level=LOG_DEBUG)
+        logger.error(f"Error generating response for {character}: {str(e)}")
         return None
 
 
-def get_rating_interpretation(rating: int) -> str:
-    """
-    Get a text interpretation of a rating value.
-    
-    Args:
-        rating: The rating value (1-7)
-        
-    Returns:
-        A string interpretation of the rating
-    """
-    if rating == MIN_RATING:
-        return "(Strongly against waking them)"
-    elif rating < DEFAULT_RATING:
-        return "(Against waking them)"
-    elif rating == DEFAULT_RATING:
-        return "(Neutral/Uncertain)"
-    elif rating < MAX_RATING:
-        return "(Favor waking them)"
-    else:
-        return "(Strongly favor waking them)"
-
-
-def get_confidence_text(confidence: int) -> str:
-    """
-    Get a text description of a confidence level.
-    
-    Args:
-        confidence: The confidence level (1-5)
-        
-    Returns:
-        A string description of the confidence level
-    """
-    if MIN_CONFIDENCE <= confidence <= MAX_CONFIDENCE:
-        return CONFIDENCE_DESCRIPTIONS[confidence-1]
-    else:
-        return f"Confidence level: {confidence}"
-
-
-def convert_to_markdown(character: str, data: Dict[str, Any]) -> str:
-    """
-    Convert JSON response to markdown format.
-    
-    Args:
-        character: The character name
-        data: The response data to convert
-        
-    Returns:
-        Markdown formatted string of the responses
-    """
-    character_name = character.replace("-", " ").title()
-    markdown = f"# {character_name}'s Response to the Dragon's Teeth Dilemma\n\n"
-    
-    # Add responses
-    for response in data["responses"]:
-        try:
-            q_num = ensure_integer_value(response["question"], 0)
-            
-            # Get question text safely
-            question_text = QUESTIONS[q_num-1] if 1 <= q_num <= len(QUESTIONS) else f"Question {q_num}"
-            
-            markdown += f"## Question {q_num}: {question_text}\n"
-            
-            # Rating with interpretation
-            rating = ensure_integer_value(response.get('rating', DEFAULT_RATING), DEFAULT_RATING)
-            rating = clamp_value(rating, MIN_RATING, MAX_RATING)
-            markdown += f"**Rating:** {rating} {get_rating_interpretation(rating)}\n"
-            
-            # Position summary
-            position_summary = response.get('position_summary', 'No position summary provided')
-            markdown += f"**Position Summary:** {position_summary}\n\n"
-            
-            # Detailed explanation
-            detailed_explanation = response.get('detailed_explanation', 'No detailed explanation provided')
-            markdown += f"**Detailed Explanation:** {detailed_explanation}\n\n"
-            
-            # Confidence with interpretation
-            conf = ensure_integer_value(response.get('confidence', DEFAULT_CONFIDENCE), DEFAULT_CONFIDENCE)
-            conf = clamp_value(conf, MIN_CONFIDENCE, MAX_CONFIDENCE)
-            
-            markdown += f"**Confidence:** {conf} ({get_confidence_text(conf)})\n\n"
-            
-        except Exception as e:
-            log_entry(f"Error formatting response {q_num} for {character}: {str(e)}", level=LOG_ERROR)
-            markdown += f"## Error Formatting Response\n\n"
-            markdown += f"There was an error formatting this response: {str(e)}\n\n"
-    
-    return markdown
-
-
-def save_response(character: str, json_data: Dict[str, Any], markdown_content: str) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Save response as both JSON and Markdown.
-    
-    Args:
-        character: The character name
-        json_data: The JSON data to save
-        markdown_content: The markdown content to save
-        
-    Returns:
-        Tuple of (json_path, md_path) if successful, (None, None) otherwise
-    """
-    try:
-        # Save JSON
-        json_path = os.path.join(OUTPUT_DIR, f"{character}.json")
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(json_data, f, indent=2)
-        
-        # Save Markdown
-        md_path = os.path.join(OUTPUT_DIR, f"{character}.md")
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write(markdown_content)
-        
-        log_entry(f"Saved response for {character}")
-        return json_path, md_path
-    except Exception as e:
-        log_entry(f"Error saving response for {character}: {str(e)}", level=LOG_ERROR)
-        log_entry(traceback.format_exc(), level=LOG_DEBUG)
-        return None, None
-
-
 def run_delphi_round_one() -> None:
-    """
-    Execute the first round of the Delphi Method.
-    """
-    log_entry("Starting Delphi Method - Round One")
+    """Execute the first round of the Delphi Method."""
+    logger.info("Starting Delphi Method - Round One")
     
-    # Store all responses in a dictionary
-    all_responses: Dict[str, Any] = {}
-    successful_characters: List[str] = []
-    failed_characters: List[str] = []
+    all_responses = {}
+    successful = []
+    failed = []
     
-    for character in CHARACTERS:
-        try:
-            # Generate response
-            response_data = generate_character_response(character)
-            if not response_data:
-                log_entry(f"Failed to get valid response for {character}, skipping", level=LOG_ERROR)
-                failed_characters.append(character)
-                continue
-                
-            # Convert to markdown
-            try:
-                markdown = convert_to_markdown(character, response_data)
-            except Exception as e:
-                log_entry(f"Error converting to markdown for {character}: {str(e)}", level=LOG_ERROR)
-                log_entry(traceback.format_exc(), level=LOG_DEBUG)
-                # Create a minimal markdown file
-                markdown = f"# {character.replace('-', ' ').title()}'s Response\n\nError converting response to markdown: {str(e)}\n\nRaw JSON data is available in the corresponding JSON file."
-            
-            # Save both formats
-            json_path, md_path = save_response(character, response_data, markdown)
-            if json_path and md_path:
-                # Add to composite
-                all_responses[character] = response_data
-                successful_characters.append(character)
-                log_entry(f"Successfully processed {character}")
-            else:
-                log_entry(f"Failed to save response for {character}", level=LOG_ERROR)
-                failed_characters.append(character)
-            
-            # Brief pause to avoid overwhelming the API
-            time.sleep(2)
-            
-        except Exception as e:
-            log_entry(f"Unhandled error processing {character}: {str(e)}", level=LOG_ERROR)
-            log_entry(traceback.format_exc(), level=LOG_ERROR)
-            failed_characters.append(character)
+    for character in CONFIG['characters']:
+        logger.info(f"Processing {character}")
+        
+        # Get response
+        response_data = generate_character_response(character)
+        if not response_data:
+            logger.error(f"Failed to get valid response for {character}")
+            failed.append(character)
+            continue
+        
+        # Format as markdown
+        markdown = format_markdown(character, response_data)
+        
+        # Save response
+        if save_response(character, response_data, markdown):
+            all_responses[character] = response_data
+            successful.append(character)
+            logger.info(f"Successfully processed {character}")
+        else:
+            failed.append(character)
+        
+        # Brief pause to avoid overwhelming the API
+        time.sleep(2)
     
     # Save composite JSON
-    try:
-        if all_responses:
-            with open(os.path.join(OUTPUT_DIR, COMPOSITE_JSON), "w", encoding="utf-8") as f:
+    if all_responses:
+        try:
+            with open(Path(CONFIG['output_dir']) / CONFIG['composite_json'], "w", encoding="utf-8") as f:
                 json.dump(all_responses, f, indent=2)
             
-            log_entry(f"Round One complete. Results saved to {OUTPUT_DIR}/{COMPOSITE_JSON}")
-            log_entry(f"Successfully processed characters: {', '.join(successful_characters)}")
+            logger.info(f"Round One complete. Results saved to {CONFIG['output_dir']}/{CONFIG['composite_json']}")
+            logger.info(f"Successfully processed: {', '.join(successful)}")
             
-            if failed_characters:
-                log_entry(f"Failed to process characters: {', '.join(failed_characters)}", level=LOG_WARNING)
-        else:
-            log_entry("No successful responses were generated, composite JSON not created", level=LOG_ERROR)
-    except Exception as e:
-        log_entry(f"Error saving composite JSON: {str(e)}", level=LOG_ERROR)
-        log_entry(traceback.format_exc(), level=LOG_DEBUG)
+            if failed:
+                logger.warning(f"Failed to process: {', '.join(failed)}")
+        except Exception as e:
+            logger.error(f"Error saving composite JSON: {str(e)}")
+    else:
+        logger.error("No successful responses were generated")
+        
+    # Summary report
+    logger.info("=== Delphi Round One Summary ===")
+    logger.info(f"Total characters: {len(CONFIG['characters'])}")
+    logger.info(f"Successfully processed: {len(successful)} characters")
+    logger.info(f"Failed: {len(failed)} characters")
+    if failed:
+        logger.info(f"Failed characters: {', '.join(failed)}")
+    logger.info(f"Debug files saved to {CONFIG['debug_dir']}")
 
 
 if __name__ == "__main__":
-    # Create output directory if it doesn't exist
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-    
-    # Create log file
-    with open(LOG_FILE, "w", encoding="utf-8") as f:
-        f.write(f"Delphi Method Simulation Log - Started {datetime.now()}\n\n")
-    
-    # Start the process
+    logger.info(f"Delphi Method Simulation started")
     run_delphi_round_one()
