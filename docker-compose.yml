@@ -1,0 +1,12 @@
+services:
+  delphi:
+    build: .
+    volumes:
+      - ./profiles:/app/profiles
+      - ./delphi_round1:/app/delphi_round1
+      - ./debug_output:/app/debug_output
+      - ./logs:/app/logs
+    environment:
+      - API_HOST=host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

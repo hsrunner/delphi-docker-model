@@ -1,0 +1,204 @@
+[2025-04-02 03:04:17] INFO: Delphi Method Simulation started
+[2025-04-02 03:04:17] INFO: Starting Delphi Method - Round One
+[2025-04-02 03:04:17] INFO: Using API URL: http://host.docker.internal:12434/engines/llama.cpp/v1
+[2025-04-02 03:04:17] INFO: Processing bugs-bunny
+[2025-04-02 03:04:17] INFO: Found file: profiles/bugs-bunny.txt
+[2025-04-02 03:04:17] INFO: Found file: initial-question.md
+[2025-04-02 03:04:17] INFO: Making API call
+[2025-04-02 03:04:42] INFO: Received response for bugs-bunny, length: 4761 chars
+[2025-04-02 03:04:42] INFO: Preview: ```json
+{
+  "responses": [
+    {
+      "question": 1,
+      "rating": 3,
+      "position_summary": "...
+[2025-04-02 03:04:42] INFO: Saved debug file: debug_output/bugs-bunny_raw_response.txt
+[2025-04-02 03:04:42] INFO: Saved debug file: debug_output/bugs-bunny_normalized_response.txt
+[2025-04-02 03:04:42] INFO: Successfully parsed JSON using hjson
+[2025-04-02 03:04:42] INFO: Saved debug file: debug_output/bugs-bunny_parsed_hjson.txt
+[2025-04-02 03:04:42] INFO: Saved response for bugs-bunny
+[2025-04-02 03:04:42] INFO: Successfully processed bugs-bunny
+[2025-04-02 03:04:44] INFO: Processing rick-sanchez
+[2025-04-02 03:04:44] INFO: Found file: profiles/rick-sanchez.txt
+[2025-04-02 03:04:44] INFO: Found file: initial-question.md
+[2025-04-02 03:04:44] INFO: Making API call
+[2025-04-02 03:05:11] INFO: Received response for rick-sanchez, length: 6510 chars
+[2025-04-02 03:05:11] INFO: Preview: ```json
+{
+  "responses": [
+    {
+      "question": 1,
+      "rating": 6,
+      "position_summary": "...
+[2025-04-02 03:05:11] INFO: Saved debug file: debug_output/rick-sanchez_raw_response.txt
+[2025-04-02 03:05:11] INFO: Saved debug file: debug_output/rick-sanchez_normalized_response.txt
+[2025-04-02 03:05:11] INFO: Successfully parsed JSON using hjson
+[2025-04-02 03:05:11] INFO: Saved debug file: debug_output/rick-sanchez_parsed_hjson.txt
+[2025-04-02 03:05:11] INFO: Saved response for rick-sanchez
+[2025-04-02 03:05:11] INFO: Successfully processed rick-sanchez
+[2025-04-02 03:05:13] INFO: Processing stewie-griffin
+[2025-04-02 03:05:13] INFO: Found file: profiles/stewie-griffin.txt
+[2025-04-02 03:05:13] INFO: Found file: initial-question.md
+[2025-04-02 03:05:13] INFO: Making API call
+[2025-04-02 03:05:40] INFO: Received response for stewie-griffin, length: 6732 chars
+[2025-04-02 03:05:40] INFO: Preview: ```json
+{
+  "responses": [
+    {
+      "question": 1,
+      "rating": 7,
+      "position_summary": "...
+[2025-04-02 03:05:40] INFO: Saved debug file: debug_output/stewie-griffin_raw_response.txt
+[2025-04-02 03:05:40] INFO: Saved debug file: debug_output/stewie-griffin_normalized_response.txt
+[2025-04-02 03:05:40] INFO: Successfully parsed JSON using hjson
+[2025-04-02 03:05:40] INFO: Saved debug file: debug_output/stewie-griffin_parsed_hjson.txt
+[2025-04-02 03:05:40] INFO: Saved response for stewie-griffin
+[2025-04-02 03:05:40] INFO: Successfully processed stewie-griffin
+[2025-04-02 03:05:42] INFO: Processing doraemon
+[2025-04-02 03:05:42] INFO: Found file: profiles/doraemon.txt
+[2025-04-02 03:05:42] INFO: Found file: initial-question.md
+[2025-04-02 03:05:42] INFO: Making API call
+[2025-04-02 03:06:05] INFO: Received response for doraemon, length: 5359 chars
+[2025-04-02 03:06:05] INFO: Preview: ```json
+{
+  "responses": [
+    {
+      "question": 1,
+      "rating": 3,
+      "position_summary": "...
+[2025-04-02 03:06:05] INFO: Saved debug file: debug_output/doraemon_raw_response.txt
+[2025-04-02 03:06:05] INFO: Saved debug file: debug_output/doraemon_normalized_response.txt
+[2025-04-02 03:06:05] INFO: Successfully parsed JSON using hjson
+[2025-04-02 03:06:05] INFO: Saved debug file: debug_output/doraemon_parsed_hjson.txt
+[2025-04-02 03:06:05] INFO: Saved response for doraemon
+[2025-04-02 03:06:05] INFO: Successfully processed doraemon
+[2025-04-02 03:06:07] INFO: Processing sandy-cheeks
+[2025-04-02 03:06:07] INFO: Found file: profiles/sandy-cheeks.txt
+[2025-04-02 03:06:07] INFO: Found file: initial-question.md
+[2025-04-02 03:06:07] INFO: Making API call
+[2025-04-02 03:06:32] INFO: Received response for sandy-cheeks, length: 5537 chars
+[2025-04-02 03:06:32] INFO: Preview: ```json
+{
+  "responses": [
+    {
+      "question": 1,
+      "rating": 3,
+      "position_summary": "...
+[2025-04-02 03:06:32] INFO: Saved debug file: debug_output/sandy-cheeks_raw_response.txt
+[2025-04-02 03:06:32] INFO: Saved debug file: debug_output/sandy-cheeks_normalized_response.txt
+[2025-04-02 03:06:32] INFO: Successfully parsed JSON using hjson
+[2025-04-02 03:06:32] INFO: Saved debug file: debug_output/sandy-cheeks_parsed_hjson.txt
+[2025-04-02 03:06:32] INFO: Saved response for sandy-cheeks
+[2025-04-02 03:06:32] INFO: Successfully processed sandy-cheeks
+[2025-04-02 03:06:34] INFO: Processing yoda
+[2025-04-02 03:06:34] INFO: Found file: profiles/yoda.txt
+[2025-04-02 03:06:34] INFO: Found file: initial-question.md
+[2025-04-02 03:06:34] INFO: Making API call
+[2025-04-02 03:06:53] INFO: Received response for yoda, length: 4387 chars
+[2025-04-02 03:06:53] INFO: Preview: ```json
+{
+  "responses": [
+    {
+      "question": 1,
+      "rating": 2,
+      "position_summary": "...
+[2025-04-02 03:06:53] INFO: Saved debug file: debug_output/yoda_raw_response.txt
+[2025-04-02 03:06:53] INFO: Saved debug file: debug_output/yoda_normalized_response.txt
+[2025-04-02 03:06:53] INFO: Successfully parsed JSON using hjson
+[2025-04-02 03:06:53] INFO: Saved debug file: debug_output/yoda_parsed_hjson.txt
+[2025-04-02 03:06:53] WARNING: Confidence out of range (7) for question 2, clamped to 5
+[2025-04-02 03:06:53] WARNING: Confidence out of range (6) for question 4, clamped to 5
+[2025-04-02 03:06:53] INFO: Saved response for yoda
+[2025-04-02 03:06:53] INFO: Successfully processed yoda
+[2025-04-02 03:06:55] INFO: Processing bender
+[2025-04-02 03:06:55] INFO: Found file: profiles/bender.txt
+[2025-04-02 03:06:55] INFO: Found file: initial-question.md
+[2025-04-02 03:06:55] INFO: Making API call
+[2025-04-02 03:07:18] INFO: Received response for bender, length: 4789 chars
+[2025-04-02 03:07:18] INFO: Preview: ```json
+{
+  "responses": [
+    {
+      "question": 1,
+      "rating": 7,
+      "position_summary": "...
+[2025-04-02 03:07:18] INFO: Saved debug file: debug_output/bender_raw_response.txt
+[2025-04-02 03:07:18] INFO: Saved debug file: debug_output/bender_normalized_response.txt
+[2025-04-02 03:07:18] INFO: Successfully parsed JSON using hjson
+[2025-04-02 03:07:18] INFO: Saved debug file: debug_output/bender_parsed_hjson.txt
+[2025-04-02 03:07:18] INFO: Saved response for bender
+[2025-04-02 03:07:18] INFO: Successfully processed bender
+[2025-04-02 03:07:20] INFO: Processing stimpy
+[2025-04-02 03:07:20] INFO: Found file: profiles/stimpy.txt
+[2025-04-02 03:07:20] INFO: Found file: initial-question.md
+[2025-04-02 03:07:20] INFO: Making API call
+[2025-04-02 03:07:41] INFO: Received response for stimpy, length: 3934 chars
+[2025-04-02 03:07:41] INFO: Preview: ```json
+{
+  "responses": [
+    {
+      "question": 1,
+      "rating": 3,
+      "position_summary": "...
+[2025-04-02 03:07:41] INFO: Saved debug file: debug_output/stimpy_raw_response.txt
+[2025-04-02 03:07:41] INFO: Saved debug file: debug_output/stimpy_normalized_response.txt
+[2025-04-02 03:07:41] INFO: Successfully parsed JSON using hjson
+[2025-04-02 03:07:41] INFO: Saved debug file: debug_output/stimpy_parsed_hjson.txt
+[2025-04-02 03:07:41] INFO: Saved response for stimpy
+[2025-04-02 03:07:41] INFO: Successfully processed stimpy
+[2025-04-02 03:07:43] INFO: Processing lisa-simpson
+[2025-04-02 03:07:43] INFO: Found file: profiles/lisa-simpson.txt
+[2025-04-02 03:07:43] INFO: Found file: initial-question.md
+[2025-04-02 03:07:43] INFO: Making API call
+[2025-04-02 03:08:04] INFO: Received response for lisa-simpson, length: 5154 chars
+[2025-04-02 03:08:04] INFO: Preview: ```json
+{
+  "responses": [
+    {
+      "question": 1,
+      "rating": 2,
+      "position_summary": "...
+[2025-04-02 03:08:04] INFO: Saved debug file: debug_output/lisa-simpson_raw_response.txt
+[2025-04-02 03:08:04] INFO: Saved debug file: debug_output/lisa-simpson_normalized_response.txt
+[2025-04-02 03:08:04] INFO: Successfully parsed JSON using hjson
+[2025-04-02 03:08:04] INFO: Saved debug file: debug_output/lisa-simpson_parsed_hjson.txt
+[2025-04-02 03:08:04] INFO: Saved response for lisa-simpson
+[2025-04-02 03:08:04] INFO: Successfully processed lisa-simpson
+[2025-04-02 03:08:06] INFO: Processing twilight-sparkle
+[2025-04-02 03:08:06] INFO: Found file: profiles/twilight-sparkle.txt
+[2025-04-02 03:08:06] INFO: Found file: initial-question.md
+[2025-04-02 03:08:06] INFO: Making API call
+[2025-04-02 03:08:28] INFO: Received response for twilight-sparkle, length: 6029 chars
+[2025-04-02 03:08:28] INFO: Preview: ```json
+{
+  "responses": [
+    {
+      "question": 1,
+      "rating": 3,
+      "position_summary": "...
+[2025-04-02 03:08:28] INFO: Saved debug file: debug_output/twilight-sparkle_raw_response.txt
+[2025-04-02 03:08:28] INFO: Saved debug file: debug_output/twilight-sparkle_normalized_response.txt
+[2025-04-02 03:08:28] INFO: Successfully parsed JSON using hjson
+[2025-04-02 03:08:28] INFO: Saved debug file: debug_output/twilight-sparkle_parsed_hjson.txt
+[2025-04-02 03:08:28] INFO: Saved response for twilight-sparkle
+[2025-04-02 03:08:28] INFO: Successfully processed twilight-sparkle
+[2025-04-02 03:08:30] INFO: Round One complete. Results saved to delphi_round1/round1_responses.json
+[2025-04-02 03:08:30] INFO: Cleaning up individual JSON files...
+[2025-04-02 03:08:30] INFO: Removed delphi_round1/bugs-bunny.json
+[2025-04-02 03:08:30] INFO: Removed delphi_round1/rick-sanchez.json
+[2025-04-02 03:08:30] INFO: Removed delphi_round1/stewie-griffin.json
+[2025-04-02 03:08:30] INFO: Removed delphi_round1/doraemon.json
+[2025-04-02 03:08:30] INFO: Removed delphi_round1/sandy-cheeks.json
+[2025-04-02 03:08:30] INFO: Removed delphi_round1/yoda.json
+[2025-04-02 03:08:30] INFO: Removed delphi_round1/bender.json
+[2025-04-02 03:08:30] INFO: Removed delphi_round1/stimpy.json
+[2025-04-02 03:08:30] INFO: Removed delphi_round1/lisa-simpson.json
+[2025-04-02 03:08:30] INFO: Removed delphi_round1/twilight-sparkle.json
+[2025-04-02 03:08:30] INFO: Successfully processed: bugs-bunny, rick-sanchez, stewie-griffin, doraemon, sandy-cheeks, yoda, bender, stimpy, lisa-simpson, twilight-sparkle
+[2025-04-02 03:08:30] INFO: === Delphi Round One Summary ===
+[2025-04-02 03:08:30] INFO: Total characters: 10
+[2025-04-02 03:08:30] INFO: Successfully processed: 10 characters
+[2025-04-02 03:08:30] INFO: Failed: 0 characters
+[2025-04-02 03:08:30] INFO: Results saved to: delphi_round1
+[2025-04-02 03:08:30] INFO: Debug files saved to: debug_output

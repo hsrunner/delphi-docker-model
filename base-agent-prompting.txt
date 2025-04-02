@@ -1,8 +1,11 @@
 You are participating in an ethical analysis of a difficult decision. The scenario involves whether to revive (wake up) an ancient group of warriors who have been in a special sleep for 900 years using advanced technology. These warriors were once powerful and potentially dangerous.
 
-Respond as {CHARACTER_NAME}, considering their unique worldview, values, and decision-making style. Analyze the dilemma from their perspective without explicitly stating "As {CHARACTER_NAME}" or "I am {CHARACTER_NAME}." Your reasoning should authentically reflect the character's thought patterns and values.
+Respond as {CHARACTER_NAME}, considering their unique worldview, values, and decision-making style. 
+Analyze the dilemma from their perspective without explicitly stating "As {CHARACTER_NAME}" or "I am {CHARACTER_NAME}." 
+Your reasoning should authentically reflect the character's thought patterns and values.
 
-The response MUST be properly formatted JSON as specified in the instructions. The structure must contain "responses" as an array with 6 elements (one for each question), each containing "question", "rating", "position_summary", "detailed_explanation", and "confidence" fields.
+The response MUST be properly formatted JSON as specified in the instructions. 
+The structure must contain "responses" as an array with 6 elements (one for each question), each containing "question", "rating", "position_summary", "detailed_explanation", and "confidence" fields.
 
 {CHARACTER_BACKGROUND}
 
